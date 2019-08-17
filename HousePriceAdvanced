@@ -1,0 +1,92 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.linear_model import Ridge
+from sklearn.model_selection import cross_val_score
+from sklearn.ensemble import BaggingRegressor
+from sklearn.ensemble import AdaBoostRegressor
+from xgboost import XGBRegressor
+
+train_df = pd.read_csv('./data/train.csv', index_col=0)
+test_df = pd.read_csv('./data/test.csv', index_col=0)
+
+# print(train_df.head())
+# prices = pd.DataFrame({"price":train_df["SalePrice"], "log(price + 1)":np.log1p(train_df["SalePrice"])})
+# plt.hist(prices["price"])
+# plt.show()
+# plt.hist(prices["log(price + 1)"])
+# plt.show()
+
+y_train = np.log1p(train_df.pop("SalePrice"))
+all_df = pd.concat((train_df, test_df), axis=0)
+# print(all_df.shape)
+# print(y_train.head())
+
+# print(all_df['MSSubClass'].dtypes)
+all_df['MSSubClass'] = all_df['MSSubClass'].astype(str)
+# print(all_df['MSSubClass'].value_counts())
+all_dummy_df = pd.get_dummies(all_df)
+# print(all_dummy_df.head())
+# print(all_dummy_df.isnull().sum().sort_values(ascending=False).head(10))
+mean_cols = all_dummy_df.mean()
+# print(mean_cols.head(10))
+all_dummy_df = all_dummy_df.fillna(mean_cols)
+
+numeric_cols = all_df.columns[all_df.dtypes != 'object']
+# print(numeric_cols)
+numeric_col_means = all_dummy_df.loc[:,numeric_cols].mean()
+numeric_col_std = all_dummy_df.loc[:,numeric_cols].std()
+all_dummy_df.loc[:,numeric_cols] = (all_dummy_df.loc[:,numeric_cols] - numeric_col_means) / numeric_col_std
+
+dummy_train_df = all_dummy_df.loc[train_df.index]
+dummy_test_df = all_dummy_df.loc[test_df.index]
+# print("dummy_train_df:"+str(dummy_train_df.shape) + " dummy_test_df:" + str(dummy_test_df.shape))
+
+X_train = dummy_train_df.values
+X_test = dummy_test_df.values
+
+# # start model
+# alphas = np.logspace(-3,2,50)
+# # print(alphas)
+# test_scores = []
+#
+# for alpha in alphas:
+#     clf = Ridge(alpha)
+#     test_score = np.sqrt(-cross_val_score(clf, X_train, y_train, cv=10, scoring='neg_mean_squared_error'))
+#     test_scores.append(np.mean(test_score))
+#
+# plt.plot(alphas, test_scores)
+# plt.show()
+ridge = Ridge(15)
+# Bagging
+params = [1,10,15,20,25,30,40]
+test_scores = []
+for param in params:
+    clf = BaggingRegressor(n_estimators=param, base_estimator=ridge)
+    test_score = np.sqrt(-cross_val_score(clf, X_train, y_train, cv=10, scoring='neg_mean_squared_error'))
+    test_scores.append(np.mean(test_score))
+plt.plot(params, test_scores)
+plt.title("BaggingRegressor")
+plt.show()
+
+# Boosting
+params = [1, 5, 10, 15, 25, 30, 40, 45, 50]
+test_scores = []
+for param in params:
+    clf = AdaBoostRegressor(n_estimators=param, base_estimator=ridge)
+    test_score = np.sqrt(-cross_val_score(clf, X_train, y_train, cv=10, scoring='neg_mean_squared_error'))
+    test_scores.append(np.mean(test_score))
+plt.plot(params,test_scores)
+plt.title("AdaBoostRegressor")
+plt.show()
+
+# XGBOOST
+params =[1, 2, 3, 4, 5, 6]
+test_scores = []
+for param in params:
+    clf = XGBRegressor(max_depth=param)
+    test_score = np.sqrt(-cross_val_score(clf, X_train, y_train, cv=10, scoring='neg_mean_squared_error'))
+    test_scores.append(np.mean(test_score))
+plt.plot(params, test_scores)
+plt.title("XGBRegressor")
+plt.show()
